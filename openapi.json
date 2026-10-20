@@ -1,0 +1,796 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Livraria Comunitária — API de Livros e Autores",
+    "version": "2.0.0",
+    "description": "Contrato da API RESTful implementada em Node.js com separação de rotas, controllers, services e repositório. A documentação permite consultar o catálogo sem autenticação e testar os endpoints protegidos usando JWT e controle de acesso baseado em perfis (RBAC). **Como testar:** execute `POST /api/v1/auth/login` em **Try it out**, copie o valor de `token` do retorno, clique em **Authorize**, cole apenas o token (sem o prefixo `Bearer`) e confirme. As requisições protegidas enviarão automaticamente `Authorization: Bearer <token>`. Os exemplos são demonstrativos."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Servidor atual (mesmo host do Swagger UI)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Autenticação",
+      "description": "Cadastro público e emissão de tokens JWT."
+    },
+    {
+      "name": "Livros",
+      "description": "Consultas públicas, cadastro restrito e comentários autenticados."
+    },
+    {
+      "name": "Autores",
+      "description": "Listagem pública e inclusão exclusiva de administradores."
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Autenticação"
+        ],
+        "summary": "Cadastrar usuário leitor",
+        "description": "Cria conta pública com perfil USER. O cliente não pode atribuir a si mesmo o perfil ADMIN. A senha é armazenada em forma de hash BCrypt; o hash não é retornado.",
+        "operationId": "registrarLeitor",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conta cadastrada; a senha nunca é retornada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Usuario"
+                },
+                "example": {
+                  "id": 15,
+                  "nome": "Ana Martins",
+                  "email": "ana.martins@gmail.com",
+                  "role": "USER"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "409": {
+            "$ref": "#/components/responses/Erro409"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Autenticação"
+        ],
+        "summary": "Autenticar usuário e gerar JWT",
+        "description": "Valida e-mail e senha por comparação BCrypt e retorna JWT assinado com tempo de expiração. Para acessar rotas protegidas, cole o token no botão **Authorize**. Credenciais de demonstração: `admin@livraria.com / admin123` ou `leitor@gmail.com / leitor123`.",
+        "operationId": "efetuarLogin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Usuário autenticado e token JWT emitido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "description": "401 Unauthorized — e-mail ou senha incorretos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                },
+                "example": {
+                  "erro": "Credenciais inválidas."
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/livros": {
+      "get": {
+        "tags": [
+          "Livros"
+        ],
+        "summary": "Listar livros do catálogo",
+        "description": "Consulta pública sem token. A resposta inclui os dados do autor e os comentários de cada livro.",
+        "operationId": "listarLivros",
+        "responses": {
+          "200": {
+            "description": "Lista de livros retornada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LivroDetalhado"
+                  }
+                },
+                "example": [
+                  {
+                    "id": 1,
+                    "titulo": "Dom Casmurro",
+                    "ano": 1899,
+                    "autor_id": 1,
+                    "autor_nome": "Machado de Assis",
+                    "comentarios": [
+                      {
+                        "id": 1,
+                        "autor_nome": "Leitor",
+                        "texto": "Clássico indispensável."
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/Erro500"
+          }
+        },
+        "security": []
+      },
+      "post": {
+        "tags": [
+          "Livros"
+        ],
+        "summary": "Cadastrar livro (somente ADMIN)",
+        "description": "Requer JWT válido com role ADMIN. O autor referenciado deve existir; quando ano for omitido, usa-se o ano corrente.",
+        "operationId": "cadastrarLivro",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LivroRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Livro criado com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivroCriado"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404Autor"
+          }
+        }
+      }
+    },
+    "/api/v1/livros/{id}": {
+      "get": {
+        "tags": [
+          "Livros"
+        ],
+        "summary": "Consultar detalhes de um livro",
+        "description": "Consulta pública de um livro pelo ID numérico, incluindo autor e comentários.",
+        "operationId": "obterLivro",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identificador numérico do livro.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Livro encontrado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivroDetalhado"
+                },
+                "example": {
+                  "id": 1,
+                  "titulo": "Dom Casmurro",
+                  "ano": 1899,
+                  "autor_id": 1,
+                  "autor_nome": "Machado de Assis",
+                  "comentarios": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404Livro"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/livros/{id}/comentarios": {
+      "post": {
+        "tags": [
+          "Livros"
+        ],
+        "summary": "Comentar livro (USER ou ADMIN)",
+        "description": "Requer JWT válido de qualquer usuário autenticado. O campo autor_nome é derivado do token, nunca fornecido pelo cliente.",
+        "operationId": "comentarLivro",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identificador numérico do livro.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "example": 1
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComentarioRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Comentário cadastrado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comentario"
+                },
+                "example": {
+                  "id": 8,
+                  "autor_nome": "Leitor",
+                  "texto": "Uma leitura emocionante e inesquecível."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404Livro"
+          }
+        }
+      }
+    },
+    "/api/v1/autores": {
+      "get": {
+        "tags": [
+          "Autores"
+        ],
+        "summary": "Listar autores",
+        "description": "Rota pública adicional já existente na API para consulta de autores e seus IDs.",
+        "operationId": "listarAutores",
+        "responses": {
+          "200": {
+            "description": "Autores retornados.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Autor"
+                  }
+                },
+                "example": [
+                  {
+                    "id": 1,
+                    "nome": "Machado de Assis",
+                    "nacionalidade": "Brasileiro"
+                  }
+                ]
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/Erro500"
+          }
+        },
+        "security": []
+      },
+      "post": {
+        "tags": [
+          "Autores"
+        ],
+        "summary": "Cadastrar autor (somente ADMIN)",
+        "description": "Requer JWT válido de um administrador. Usuários comuns recebem 403; requisições sem token recebem 401.",
+        "operationId": "cadastrarAutor",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutorRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Autor criado com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Autor"
+                },
+                "example": {
+                  "id": 2,
+                  "nome": "Clarice Lispector",
+                  "nacionalidade": "Brasileira"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Informe **somente o token JWT** retornado pelo login. A interface acrescentará automaticamente `Bearer ` no cabeçalho Authorization."
+      }
+    },
+    "schemas": {
+      "Erro": {
+        "type": "object",
+        "description": "Formato padronizado das falhas retornadas pela API.",
+        "required": [
+          "erro"
+        ],
+        "properties": {
+          "erro": {
+            "type": "string",
+            "example": "Token de autenticação não fornecido."
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": [
+          "nome",
+          "email",
+          "senha"
+        ],
+        "properties": {
+          "nome": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nome visível do leitor.",
+            "example": "Ana Martins"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "E-mail único do leitor.",
+            "example": "ana.martins@gmail.com"
+          },
+          "senha": {
+            "type": "string",
+            "format": "password",
+            "minLength": 6,
+            "description": "Senha em texto na requisição; persistida apenas como hash BCrypt.",
+            "example": "senhaSegura123"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "senha"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "admin@livraria.com"
+          },
+          "senha": {
+            "type": "string",
+            "format": "password",
+            "example": "admin123"
+          }
+        }
+      },
+      "Usuario": {
+        "type": "object",
+        "required": [
+          "id",
+          "nome",
+          "email",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 15
+          },
+          "nome": {
+            "type": "string",
+            "example": "Admin"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "admin@livraria.com"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ADMIN"
+            ],
+            "example": "ADMIN",
+            "description": "O cadastro público sempre atribui USER."
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "usuario",
+          "token"
+        ],
+        "properties": {
+          "usuario": {
+            "$ref": "#/components/schemas/Usuario"
+          },
+          "token": {
+            "type": "string",
+            "description": "JWT assinado para usar no botão Authorize.",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjE1LCJyb2xlIjoiQURNSU4ifQ.assinatura-ilustrativa"
+          }
+        }
+      },
+      "AutorRequest": {
+        "type": "object",
+        "required": [
+          "nome"
+        ],
+        "properties": {
+          "nome": {
+            "type": "string",
+            "minLength": 1,
+            "example": "Clarice Lispector"
+          },
+          "nacionalidade": {
+            "type": "string",
+            "example": "Brasileira",
+            "description": "Opcional; padrão: Não informada."
+          }
+        }
+      },
+      "Autor": {
+        "type": "object",
+        "required": [
+          "id",
+          "nome",
+          "nacionalidade"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 2
+          },
+          "nome": {
+            "type": "string",
+            "example": "Clarice Lispector"
+          },
+          "nacionalidade": {
+            "type": "string",
+            "example": "Brasileira"
+          }
+        }
+      },
+      "LivroRequest": {
+        "type": "object",
+        "required": [
+          "titulo",
+          "autor_id"
+        ],
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "minLength": 1,
+            "example": "A Hora da Estrela"
+          },
+          "ano": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9999,
+            "description": "Ano de publicação. Opcional; padrão: ano atual.",
+            "example": 1977
+          },
+          "autor_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "ID de um autor existente.",
+            "example": 1
+          }
+        }
+      },
+      "ComentarioRequest": {
+        "type": "object",
+        "required": [
+          "texto"
+        ],
+        "properties": {
+          "texto": {
+            "type": "string",
+            "minLength": 1,
+            "example": "Uma leitura emocionante e inesquecível."
+          }
+        }
+      },
+      "Comentario": {
+        "type": "object",
+        "required": [
+          "id",
+          "autor_nome",
+          "texto"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 8
+          },
+          "autor_nome": {
+            "type": "string",
+            "description": "Nome extraído do JWT, não do corpo da requisição.",
+            "example": "Leitor"
+          },
+          "texto": {
+            "type": "string",
+            "example": "Uma leitura emocionante e inesquecível."
+          }
+        }
+      },
+      "LivroCriado": {
+        "type": "object",
+        "required": [
+          "id",
+          "titulo",
+          "ano",
+          "autor_id",
+          "comentarios"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 3
+          },
+          "titulo": {
+            "type": "string",
+            "example": "A Hora da Estrela"
+          },
+          "ano": {
+            "type": "integer",
+            "example": 1977
+          },
+          "autor_id": {
+            "type": "integer",
+            "format": "int64",
+            "example": 2
+          },
+          "comentarios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comentario"
+            },
+            "example": []
+          }
+        }
+      },
+      "LivroDetalhado": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LivroCriado"
+          },
+          {
+            "type": "object",
+            "required": [
+              "autor_nome"
+            ],
+            "properties": {
+              "autor_nome": {
+                "type": "string",
+                "example": "Clarice Lispector"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "responses": {
+      "Erro400": {
+        "description": "400 Bad Request — falha de validação.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            },
+            "example": {
+              "erro": "Campos obrigatórios ou valores inválidos."
+            }
+          }
+        }
+      },
+      "Erro401": {
+        "description": "401 Unauthorized — credenciais inválidas ou JWT ausente, incorreto ou expirado.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            },
+            "example": {
+              "erro": "Token inválido ou expirado."
+            }
+          }
+        }
+      },
+      "Erro403": {
+        "description": "403 Forbidden — usuário autenticado sem perfil ADMIN.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            },
+            "example": {
+              "erro": "Acesso proibido: privilégio de ADMIN exigido."
+            }
+          }
+        }
+      },
+      "Erro404Livro": {
+        "description": "404 Not Found — livro inexistente.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            },
+            "example": {
+              "erro": "Livro não localizado."
+            }
+          }
+        }
+      },
+      "Erro404Autor": {
+        "description": "404 Not Found — autor referenciado inexistente.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            },
+            "example": {
+              "erro": "O autor informado não existe."
+            }
+          }
+        }
+      },
+      "Erro409": {
+        "description": "409 Conflict — e-mail já utilizado.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            },
+            "example": {
+              "erro": "E-mail já cadastrado no sistema."
+            }
+          }
+        }
+      },
+      "Erro500": {
+        "description": "500 Internal Server Error — falha não prevista.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            },
+            "example": {
+              "erro": "Ocorreu um erro interno no servidor."
+            }
+          }
+        }
+      }
+    }
+  }
+}
